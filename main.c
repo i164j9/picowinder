@@ -1,7 +1,8 @@
-#include <stdio.h>
+#include <string.h>
 
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
+#include "hardware/sync.h"
 #include "hardware/uart.h"
 
 #include "tusb.h"
@@ -12,18 +13,7 @@
 
 #include "config.h"
 
-
-struct JoystickState
-{
-    uint16_t buttons        ;
-    uint16_t x          : 10;
-    uint16_t y          : 10;
-    uint8_t  throttle   :  7;
-    uint8_t  twist      :  6;
-    uint8_t  hat        :  4;
-} joystickState;
-
-struct report
+struct __attribute__((__packed__)) HidJoystickReport
 {
     uint16_t buttons;
     uint16_t x;
@@ -31,63 +21,83 @@ struct report
     uint8_t twist;
     uint8_t throttle;
     uint8_t hat;
-} report;
+};
 
-uint16_t report_size_bytes = 9; // sizeof doesn't necessarily work well due to packing
+_Static_assert(sizeof(struct HidJoystickReport) == 9, "HID report must remain packed to 9 bytes");
 
-uint rxFifoEntries;
-uint32_t raw0;
-uint32_t raw1;
-uint64_t joystickStateRaw;
+static struct HidJoystickReport hid_report_buffers[2];
+static volatile uint8_t hid_report_index;
+static volatile bool hid_report_pending;
+static volatile uint16_t latest_buttons;
 
+static bool take_pending_hid_report(struct HidJoystickReport *report)
+{
+    uint32_t interrupts = save_and_disable_interrupts();
+    if (!hid_report_pending)
+    {
+        restore_interrupts(interrupts);
+        return false;
+    }
+
+    *report = hid_report_buffers[hid_report_index];
+    hid_report_pending = false;
+    restore_interrupts(interrupts);
+    return true;
+}
 
 void joystickReadIRQ()
 {
     const PIO pio = pio0;
     const uint sm = 0;
-
-    rxFifoEntries = pio_sm_get_rx_fifo_level(pio, sm);
-
     uint64_t raw0 = pio_sm_get(pio, sm);
     uint64_t raw1 = pio_sm_get(pio, sm);
     uint64_t raw = (raw1 << 16) | (raw0 >> 8);
+    struct HidJoystickReport next_report;
 
 #ifdef FIRMWARE_SHIFT
     bool shift = ((~raw) & 0x100) != 0;
     uint16_t buttons = (~raw) & 0xff;
-    joystickState.buttons = shift ? (buttons << 8) : buttons;
+    next_report.buttons = shift ? (buttons << 8) : buttons;
 #else
-    joystickState.buttons   = ~(raw & 0x1ff);
+    next_report.buttons = ~(raw & 0x1ff);
 #endif
 
-    joystickState.x         = (raw >>  9) & 0x3ff;
-    joystickState.y         = (raw >> 19) & 0x3ff;
-    joystickState.throttle  = (raw >> 29) & 0x07f;
-    joystickState.twist     = (raw >> 36) & 0x03f;
-    joystickState.hat       = (raw >> 42) & 0x00f;
+    next_report.x = (raw >> 9) & 0x3ff;
+    next_report.y = (raw >> 19) & 0x3ff;
+    next_report.throttle = (raw >> 29) & 0x07f;
+    next_report.twist = (raw >> 36) & 0x03f;
+    next_report.hat = (raw >> 42) & 0x00f;
 
-    report.buttons = joystickState.buttons;
-    report.x = joystickState.x;
-    report.y = joystickState.y;
-    report.twist = joystickState.twist;
-    report.throttle = joystickState.throttle;
-    report.hat = joystickState.hat;
+    latest_buttons = next_report.buttons;
+
+    uint8_t current_index = hid_report_index;
+    if (memcmp(&hid_report_buffers[current_index], &next_report, sizeof(next_report)) != 0)
+    {
+        uint8_t next_index = current_index ^ 1u;
+        hid_report_buffers[next_index] = next_report;
+        hid_report_index = next_index;
+        hid_report_pending = true;
+    }
 
     pio_interrupt_clear(pio, 0);
 }
 
 void hid_task()
 {
+    if (!hid_report_pending) { return; }
+
     if (tud_suspended())
     {
         tud_remote_wakeup();
+        return;
     }
-    else
-    {
-        if (!tud_hid_ready()) { return; }
 
-        tud_hid_n_report(0x00, 0x01, &report, report_size_bytes);
-    }
+    if (!tud_hid_ready()) { return; }
+
+    struct HidJoystickReport report;
+    if (!take_pending_hid_report(&report)) { return; }
+
+    tud_hid_n_report(0x00, 0x01, &report, sizeof(report));
 }
 
 
@@ -99,6 +109,7 @@ int main()
     // The default is 8 data bits, no parity bit, and 1 stop bit.
     uart_init(uart0, 31250);
     gpio_set_function(PIN_MIDI_TX, UART_FUNCSEL_NUM(uart0, PIN_MIDI_TX));
+    ffb_midi_init(uart0);
 
     // PIO setup
     PIO pio = pio0;
@@ -197,7 +208,8 @@ the trigger is held.
     int effect_id_spring = ffb_midi_define_effect(uart0, &lightSpringEffect);
     int effect_id_kickback = ffb_midi_define_effect(uart0, &kickbackEffect);
 
-    bool fire_old;
+    bool fire_old = false;
+    (void) effect_id_spring;
 
 #endif
 
@@ -208,7 +220,7 @@ the trigger is held.
         hid_task();
 
 #ifdef EXAMPLE_EFFECTS
-        bool fire = (joystickState.buttons & 0x0001) != 0;
+    bool fire = (latest_buttons & 0x0001) != 0;
         if (fire && !fire_old)
         {
             ffb_midi_play(uart0, effect_id_kickback);

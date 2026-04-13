@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/dev/Documents/picowinder/build-release/pioasm/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

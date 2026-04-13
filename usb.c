@@ -98,8 +98,6 @@ struct __attribute__((__packed__ )) t_set_ramp_report
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
         hid_report_type_t report_type, uint8_t const* buffer, uint16_t bufsize)
 {
-    bool echo = true;
-
     switch (report_type)
     {
         case HID_REPORT_TYPE_OUTPUT:
@@ -329,7 +327,4 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
             break;
         }
     }
-
-    // Echo back anything we received from the host
-    if (echo) { tud_hid_report(0, buffer, bufsize); }
 }

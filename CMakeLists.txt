@@ -61,6 +61,11 @@ target_sources(picowinder PUBLIC
 pico_set_program_name(picowinder "picowinder")
 pico_set_program_version(picowinder "0.1")
 
+target_link_options(picowinder PRIVATE
+    "-Wl,-Map=${CMAKE_CURRENT_BINARY_DIR}/picowinder.map"
+    "-Wl,--cref"
+)
+
 # Generate PIO headers
 pico_generate_pio_header(picowinder ${CMAKE_CURRENT_LIST_DIR}/ffb_handshake.pio)
 pico_generate_pio_header(picowinder ${CMAKE_CURRENT_LIST_DIR}/read_joystick.pio)

@@ -1,6 +1,81 @@
 #include "ffb_midi.h"
 
-enum MidiEffectType effects_assigned[EFFECT_MEMORY_START + EFFECT_MEMORY_SIZE] = { 0 };
+#include "hardware/irq.h"
+#include "hardware/sync.h"
+
+#define MIDI_TX_QUEUE_SIZE 512
+#define MIDI_TX_QUEUE_MASK (MIDI_TX_QUEUE_SIZE - 1)
+
+static uint8_t effects_assigned[EFFECT_MEMORY_START + EFFECT_MEMORY_SIZE] = { 0 };
+static uart_inst_t *midi_uart;
+static uint midi_uart_irq;
+static volatile uint16_t midi_tx_head;
+static volatile uint16_t midi_tx_tail;
+static uint8_t midi_tx_queue[MIDI_TX_QUEUE_SIZE];
+static bool last_add_succeeded;
+static uint8_t last_assigned_effect_id;
+
+static inline uint16_t midi_tx_next_index(uint16_t index)
+{
+    return (index + 1u) & MIDI_TX_QUEUE_MASK;
+}
+
+static void ffb_midi_kick_tx_locked()
+{
+    if (midi_uart == NULL) { return; }
+
+    while ((midi_tx_head != midi_tx_tail) && uart_is_writable(midi_uart))
+    {
+        uart_get_hw(midi_uart)->dr = midi_tx_queue[midi_tx_tail];
+        midi_tx_tail = midi_tx_next_index(midi_tx_tail);
+    }
+
+    uart_set_irq_enables(midi_uart, false, midi_tx_head != midi_tx_tail);
+}
+
+static void ffb_midi_uart_irq_handler()
+{
+    ffb_midi_kick_tx_locked();
+}
+
+static bool ffb_midi_queue_bytes(uart_inst_t *uart, uint8_t const *bytes, size_t length)
+{
+    if (midi_uart != uart)
+    {
+        ffb_midi_init(uart);
+    }
+
+    uint32_t interrupts = save_and_disable_interrupts();
+    uint16_t used = (midi_tx_head - midi_tx_tail) & MIDI_TX_QUEUE_MASK;
+    uint16_t free = MIDI_TX_QUEUE_MASK - used;
+    if (length > free)
+    {
+        restore_interrupts(interrupts);
+        return false;
+    }
+
+    for (size_t i = 0; i < length; i++)
+    {
+        midi_tx_queue[midi_tx_head] = bytes[i];
+        midi_tx_head = midi_tx_next_index(midi_tx_head);
+    }
+
+    ffb_midi_kick_tx_locked();
+    restore_interrupts(interrupts);
+    return true;
+}
+
+void ffb_midi_init(uart_inst_t *uart)
+{
+    midi_uart = uart;
+    midi_uart_irq = (uart == uart0) ? UART0_IRQ : UART1_IRQ;
+    midi_tx_head = 0;
+    midi_tx_tail = 0;
+
+    irq_set_exclusive_handler(midi_uart_irq, ffb_midi_uart_irq_handler);
+    irq_set_enabled(midi_uart_irq, true);
+    uart_set_irq_enables(uart, false, false);
+}
 
 int ffb_midi_get_free_effect_id()
 {
@@ -23,15 +98,10 @@ size_t ffb_midi_get_num_available_effects()
 
     return num_free;
 }
-
-bool last_add_succeeded;
-
 bool ffb_midi_last_add_succeeded()
 {
     return last_add_succeeded;
 }
-
-uint8_t last_assigned_effect_id;
 
 uint8_t ffb_midi_last_assigned_effect_id()
 {
@@ -45,7 +115,7 @@ void ffb_midi_set_autocenter(uart_inst_t *uart, bool enabled)
     };
 
     autocenter_cmd[1] = enabled ? 0x01 : 0x06; 
-    uart_write_blocking(uart, autocenter_cmd, sizeof(autocenter_cmd));
+    ffb_midi_queue_bytes(uart, autocenter_cmd, sizeof(autocenter_cmd));
 }
 
 /*
@@ -155,7 +225,11 @@ int ffb_midi_define_effect(uart_inst_t *uart, struct Effect *effect)
 
     effect_data[next_index++] = 0xf7; // SysEx end
 
-    uart_write_blocking(uart, effect_data, next_index);
+    if (!ffb_midi_queue_bytes(uart, effect_data, next_index))
+    {
+        last_add_succeeded = false;
+        return -1;
+    }
 
     last_add_succeeded = true;
     last_assigned_effect_id = effect_id;
@@ -168,7 +242,7 @@ void ffb_midi_erase(uart_inst_t *uart, int effect_id)
     if (effect_id < 0) { return; }
 
     uint8_t msg[3] = { 0xb5, 0x10, effect_id & 0x7f };
-    uart_write_blocking(uart, msg, sizeof(msg));
+    ffb_midi_queue_bytes(uart, msg, sizeof(msg));
 
     effects_assigned[effect_id] = MIDI_ET_NONE;
 }
@@ -178,7 +252,7 @@ void ffb_midi_play_solo(uart_inst_t *uart, int effect_id)
     if (effect_id < 0) { return; }
 
     uint8_t msg[3] = { 0xb5, 0x00, effect_id & 0x7f };
-    uart_write_blocking(uart, msg, sizeof(msg));
+    ffb_midi_queue_bytes(uart, msg, sizeof(msg));
 }
 
 void ffb_midi_play(uart_inst_t *uart, int effect_id)
@@ -186,7 +260,7 @@ void ffb_midi_play(uart_inst_t *uart, int effect_id)
     if (effect_id < 0) { return; }
 
     uint8_t msg[3] = { 0xb5, 0x20, effect_id & 0x7f };
-    uart_write_blocking(uart, msg, sizeof(msg));
+    ffb_midi_queue_bytes(uart, msg, sizeof(msg));
 }
 
 void ffb_midi_pause(uart_inst_t *uart, int effect_id)
@@ -194,7 +268,7 @@ void ffb_midi_pause(uart_inst_t *uart, int effect_id)
     if (effect_id < 0) { return; }
 
     uint8_t msg[3] = { 0xb5, 0x30, effect_id & 0x7f };
-    uart_write_blocking(uart, msg, sizeof(msg));
+    ffb_midi_queue_bytes(uart, msg, sizeof(msg));
 }
 
 void ffb_midi_modify(uart_inst_t *uart, int effect_id, uint8_t param, uint16_t value)
@@ -203,5 +277,5 @@ void ffb_midi_modify(uart_inst_t *uart, int effect_id, uint8_t param, uint16_t v
 
     uint8_t msg[6] = {
         0xb5, param, effect_id & 0x7f, 0xa5, lo7(value), hi7(value) };
-    uart_write_blocking(uart, msg, sizeof(msg));
+    ffb_midi_queue_bytes(uart, msg, sizeof(msg));
 }

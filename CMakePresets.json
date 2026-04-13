@@ -1,0 +1,39 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "pico-debug",
+      "displayName": "Pico Debug",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PICO_BOARD": "pico",
+        "PICO_NO_PICOTOOL": "ON",
+        "PICO_SDK_PATH": "${sourceDir}/.pico-sdk/sdk"
+      }
+    },
+    {
+      "name": "pico-release",
+      "displayName": "Pico Release",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PICO_BOARD": "pico",
+        "PICO_NO_PICOTOOL": "ON",
+        "PICO_SDK_PATH": "${sourceDir}/.pico-sdk/sdk"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "pico-debug",
+      "configurePreset": "pico-debug"
+    },
+    {
+      "name": "pico-release",
+      "configurePreset": "pico-release"
+    }
+  ]
+}

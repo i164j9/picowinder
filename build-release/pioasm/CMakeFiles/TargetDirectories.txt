@@ -1,0 +1,7 @@
+/home/dev/Documents/picowinder/build-release/pioasm/CMakeFiles/pioasm.dir
+/home/dev/Documents/picowinder/build-release/pioasm/CMakeFiles/edit_cache.dir
+/home/dev/Documents/picowinder/build-release/pioasm/CMakeFiles/rebuild_cache.dir
+/home/dev/Documents/picowinder/build-release/pioasm/CMakeFiles/list_install_components.dir
+/home/dev/Documents/picowinder/build-release/pioasm/CMakeFiles/install.dir
+/home/dev/Documents/picowinder/build-release/pioasm/CMakeFiles/install/local.dir
+/home/dev/Documents/picowinder/build-release/pioasm/CMakeFiles/install/strip.dir

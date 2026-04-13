@@ -91,6 +91,7 @@ struct Effect
 #define MIDI_ALL_EFFECTS 0x7f
 
 
+void ffb_midi_init(uart_inst_t *uart);
 int ffb_midi_get_free_effect_id();
 size_t ffb_midi_get_num_available_effects();
 bool ffb_midi_last_add_succeeded();
