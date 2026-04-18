@@ -1,0 +1,5 @@
+/home/dev/Documents/picowinder/build-release-uf2/pioasm-install/pioasm/pioasm
+/home/dev/Documents/picowinder/build-release-uf2/pioasm-install/pioasm/pioasmTargets.cmake
+/home/dev/Documents/picowinder/build-release-uf2/pioasm-install/pioasm/pioasmTargets-release.cmake
+/home/dev/Documents/picowinder/build-release-uf2/pioasm-install/pioasm/pioasmConfig.cmake
+/home/dev/Documents/picowinder/build-release-uf2/pioasm-install/pioasm/pioasmConfigVersion.cmake

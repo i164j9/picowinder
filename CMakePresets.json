@@ -24,6 +24,17 @@
         "PICO_NO_PICOTOOL": "ON",
         "PICO_SDK_PATH": "${sourceDir}/.pico-sdk/sdk"
       }
+    },
+    {
+      "name": "pico-release-uf2",
+      "displayName": "Pico Release UF2",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-release-uf2",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PICO_BOARD": "pico",
+        "PICO_SDK_PATH": "${sourceDir}/.pico-sdk/sdk"
+      }
     }
   ],
   "buildPresets": [
@@ -34,6 +45,10 @@
     {
       "name": "pico-release",
       "configurePreset": "pico-release"
+    },
+    {
+      "name": "pico-release-uf2",
+      "configurePreset": "pico-release-uf2"
     }
   ]
 }

@@ -1,0 +1,5 @@
+/home/dev/Documents/picowinder/build-release-uf2/_deps/picotool/picotool
+/home/dev/Documents/picowinder/build-release-uf2/_deps/picotool/picotoolTargets.cmake
+/home/dev/Documents/picowinder/build-release-uf2/_deps/picotool/picotoolTargets-release.cmake
+/home/dev/Documents/picowinder/build-release-uf2/_deps/picotool/picotoolConfig.cmake
+/home/dev/Documents/picowinder/build-release-uf2/_deps/picotool/picotoolConfigVersion.cmake

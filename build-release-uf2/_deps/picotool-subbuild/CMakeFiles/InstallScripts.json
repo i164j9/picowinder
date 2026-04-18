@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/dev/Documents/picowinder/build-release-uf2/_deps/picotool-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

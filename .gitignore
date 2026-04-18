@@ -2,3 +2,4 @@ build
 notes
 .vscode
 .pico-sdk
+build.*
